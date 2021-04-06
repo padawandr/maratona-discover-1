@@ -169,6 +169,7 @@ header {
 	top: 0;
 	visibility: hidden;
 	width: 100%;
+	z-index: 10;
 }
 
 .modal-overlay.active {
@@ -200,9 +201,36 @@ header {
 	width: 100%;
 }
 
-.form small {
-	font-size: .8rem;
-	opacity: .4;
+.form .radio {
+	align-items: center;
+	display: flex;
+}
+
+.form .radio input {
+	appearance: none;
+	border: 2px solid #999;
+	border-radius: 50%;
+	height: 1.2rem;
+	margin-right: .25rem;
+	padding: .1rem;
+	transition: .2s border linear;
+	width: 1.2rem;
+}
+
+.form .radio input:focus {
+	outline: none;
+}
+
+.form #deposit:checked {
+	border: 6px solid #49aa26;
+}
+
+.form #spend:checked {
+	border: 6px solid #e92929;
+}
+
+.form .radio label {
+	margin-right: 1rem;
 }
 
 .form .actions {
