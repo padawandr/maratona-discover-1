@@ -1,106 +1,196 @@
 const Modal = {
+	
 	overlay: document.querySelector('.modal-overlay'),
+	
 	toggle() {
 		this.overlay.classList.toggle('active');
 	}
+	
+};
+
+const Storage = {
+
+	get() {
+		return (JSON.parse(localStorage.getItem('dev.finances:transactions')) || []);
+	},
+
+	set(transactions) {
+		localStorage.setItem('dev.finances:transactions', JSON.stringify(transactions));
+	}
+
 };
 
 const Balance = {
+
 	incomes() {
 		let result = 0;
-		for (let transaction of transactions) {
+		for (let transaction of Transaction.all) {
 			if (transaction.amount > 0) {
 				result += transaction.amount;
 			}
 		}
-		return (result / 100);
+		return result;
 	},
+
 	expenses() {
 		let result = 0;
-		for (let transaction of transactions) {
+		for (let transaction of Transaction.all) {
 			if (transaction.amount < 0) {
 				result += transaction.amount;
 			}
 		}
-		return (result / 100);
+		return result;
 	},
+
 	total() {
-		let result = 0;
-		for (let transaction of transactions) {
-			result += transaction.amount;
-		}
-		return (result / 100);
+		return (Balance.incomes() + Balance.expenses());
 	},
+
 	update() {
 		document.querySelector('#incomes-display')
-			.textContent = this.incomes().toLocaleString('pt-BR', {
-				style: 'currency',
-				currency: 'BRL'
-			});
+			.textContent = Utils.formatBRL(this.incomes());
 		document.querySelector('#expenses-display')
-			.textContent = this.expenses().toLocaleString('pt-BR', {
-				style: 'currency',
-				currency: 'BRL'
-			});
+			.textContent = Utils.formatBRL(this.expenses());
 		document.querySelector('#total-display')
-			.textContent = this.total().toLocaleString('pt-BR', {
-				style: 'currency',
-				currency: 'BRL'
-			});
+			.textContent = Utils.formatBRL(this.total());
 	}
+
 };
 
 const Transaction = {
-	transactionContainer: document.querySelector('#data-table tbody'),
-	createTransaction({ description, amount, date }) {
-		const transactionType = (amount < 0) ? 'expense' : 'income';
+
+	all: Storage.get(),
+
+	container: document.querySelector('#data-table tbody'),
+
+	create({ description, amount, date }, index) {
+		const type = (amount < 0) ? 'expense' : 'income';
 		const tr = document.createElement('tr');
-		amount = (Math.abs(amount) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+		tr.dataset.index = index;
 		tr.innerHTML = `
 			<td class="description">${description}</td>
-			<td class="${transactionType}">${amount}</td>
+			<td class="${type}">${Utils.formatCurrency(amount)}</td>
 			<td class="date">${date}</td>
-			<td><img src="./assets/minus.svg" alt="remover transação"></td>
+			<td>
+				<img src="./assets/minus.svg" alt="remover transação" onclick="Transaction.remove('${index}')">
+			</td>
 		`;
-		this.transactionContainer.append(tr);
+		this.container.append(tr);
+	},
+
+	add(transaction) {
+		Transaction.all.push(transaction);
+		App.reload();
+	},
+
+	remove(index) {
+		Transaction.all.splice(index, 1);
+		App.reload();
+	},
+
+	clear() {
+		this.container.innerHTML = '';
 	}
+
 };
 
-const transactions = [
-	{
-		id: 1,
-		description: 'Luz',
-		amount: -500_12,
-		date: '23/01/2021'
+const Utils = {
+
+	formatAmount(amount, flow) {
+		return (flow === 'deposit') ? Math.round(amount * 100) : Math.round(amount * -100);
 	},
-	{
-		id: 2,
-		description: 'Criação website',
-		amount: 5000_00,
-		date: '24/01/2021'
+
+	formatDate(date) {
+		const splitDate = date.split('-');
+		return `${splitDate[2]}/${splitDate[1]}/${splitDate[0]}`;
 	},
-	{
-		id: 3,
-		description: 'Internet',
-		amount: -200_34,
-		date: '26/01/2021'
+
+	formatCurrency(amount) {
+		return (amount / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+	},
+
+	formatBRL(amount) {
+		return (amount / 100).toLocaleString('pt-BR', {
+			style: 'currency',
+			currency: 'BRL'
+		});
 	}
-];
 
-const newTransaction = document.querySelector('.new');
-const cancelTransaction = document.querySelector('.cancel');
+};
 
-newTransaction.addEventListener('click', () => {
-	Modal.toggle();
-});
+const Form = {
 
-cancelTransaction.addEventListener('click', () => {
-	Modal.toggle();
-});
+	form: document.querySelector('form'),
+	description: document.querySelector('input#description'),
+	amount: document.querySelector('input#amount'),
+	cashFlow: document.querySelectorAll('input[type=radio]'),
+	date: document.querySelector('input#date'),
 
-// add transactions to table
-for (let transaction of transactions) {
-	Transaction.createTransaction(transaction);
-}
+	getValues() {
+		let flow;
+		for (let prop of this.cashFlow) {
+			if (prop.checked === true) {
+				flow = prop.value;
+			}
+		}
 
-Balance.update();
+		return {
+			description: this.description.value,
+			amount: this.amount.value,
+			flow,
+			date: this.date.value
+		};
+	},
+
+	submit(event) {
+		event.preventDefault();
+
+		try {
+			this.validateFields();
+			const transaction = this.validateValues();
+			Transaction.add(transaction);
+			this.form.reset();
+			Modal.toggle();
+		} catch (error) {
+			alert(error.message);
+		}
+	},
+
+	validateFields() {
+		const { description, amount, date } = this.getValues();
+		if (description.trim() === '' || amount.trim() === '' || date.trim() === '') {
+			throw new Error('Por favor, preencha todos os campos');
+		}
+	},
+
+	validateValues() {
+		let { description, amount, flow, date } = this.getValues();
+		amount = Utils.formatAmount(Math.abs(amount), flow);
+		date = Utils.formatDate(date);
+		return {
+			description,
+			amount,
+			date
+		};
+	}
+
+};
+
+const App = {
+
+	init() {
+		Transaction.all.forEach((transaction, index) => {
+			Transaction.create(transaction, index);
+		});
+		Balance.update();
+		Storage.set(Transaction.all);
+	},
+
+	reload() {
+		Transaction.clear();
+		this.init();
+	}
+
+};
+
+App.init();
